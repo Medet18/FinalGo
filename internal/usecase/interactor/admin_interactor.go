@@ -1,8 +1,10 @@
-package model
+package interactor
 
 import (
 	"encoding/json"
-
+	"finals/internal/domain/model"
+	"finals/internal/usecase/presenter"
+	"finals/internal/usecase/repository"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,32 +12,18 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
+type adminInteractor struct {
+	AdminRepository repository.AdminRepository
+	AdminPresenter  presenter.AdminPresenter
+}
+
 var jwtKey = []byte("secret_key")
 
-type Admin struct {
-	AUID         string
-	Privilege_ID int    `json:"pr"`
-	IsActive     bool   `json:"isactive"`
-	Password     string `json:"password"`
-	Username     string `json:"username"`
-}
-
-type Claims struct {
-	Username string `json:"username"`
-	jwt.StandardClaims
-}
-
-// func (a *Admin) isChecked(login, password string) bool {
-// 	if a.Login == login && a.Password == password {
-// 		return true
-// 	}
-// 	return false
-// }
 var users = map[string]string{}
 
-func Signin(w http.ResponseWriter, r *http.Request) {
-
-	var admins Admin
+// Signin implements AdminInteractor
+func (us *adminInteractor) Signin(w http.ResponseWriter, r *http.Request) {
+	var admins model.Admin
 	// Получить тело JSON и декодировать в учетные данные
 	error := json.NewDecoder(r.Body).Decode(&admins)
 	if error != nil {
@@ -48,7 +36,7 @@ func Signin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expirationTime := time.Now().Add(30 * time.Minute)
-	claims := &Claims{
+	claims := &model.Claims{
 		Username: admins.Username,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
@@ -62,17 +50,18 @@ func Signin(w http.ResponseWriter, r *http.Request) {
 		Value:   tokenString,
 		Expires: expirationTime,
 	})
+
 }
 
-func SiteAuto(w http.ResponseWriter, r *http.Request) {
-
+// SiteAuto implements AdminInteractor
+func (*adminInteractor) SiteAuto(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("token")
 	if err == http.ErrNoCookie {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	tknStr := c.Value
-	claims := &Claims{}
+	claims := &model.Claims{}
 
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
@@ -91,4 +80,13 @@ func SiteAuto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write([]byte(fmt.Sprintf("Welcome %s!", claims.Username)))
+}
+
+type AdminInteractor interface {
+	Signin(w http.ResponseWriter, r *http.Request)
+	SiteAuto(w http.ResponseWriter, r *http.Request)
+}
+
+func newAdminInteractor(repo repository.AdminRepository, pres presenter.AdminPresenter) AdminInteractor {
+	return &adminInteractor{repo, pres}
 }
